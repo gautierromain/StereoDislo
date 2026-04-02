@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Apr  2 13:18:44 2026
+
+@author: romain.gautier
+"""
+%matplotlib qt
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
@@ -42,33 +50,42 @@ def get_spline(points,start,end,smooth):
     tck,u = scipy.interpolate.splprep([points[path_s][:,0],points[path_s][:,1]],s=smooth)
     return tck,u
 
-#everything explained in : https://stackoverflow.com/questions/77099540/how-to-convert-a-bspline-ppoly-object-into-an-array-of-polynomials-list
-#indPoly is the poly from the indPolyth interval
-def get_poly(polys,x,indPoly,find_y=True):
-    if find_y==True : 
-        i=1 #it will interpolate the y for a given x
-    else:
-        i=0 #it will interpolate the x for a given y
-    poly1=polys[i].c[0,indPoly]*(x-polys[i].x[indPoly])**3 + polys[i].c[1,indPoly]*(x-polys[i].x[indPoly])**2 + polys[i].c[2,indPoly]*(x-polys[i].x[indPoly]) + polys[i].c[3,indPoly]
-    deriv1=3*polys[i].c[0,indPoly]*(x-polys[i].x[indPoly])**2 + 2*polys[i].c[1,indPoly]*(x-polys[i].x[indPoly]) + polys[i].c[2,indPoly]
-    deriv2=6*polys[i].c[0,indPoly]*(x-polys[i].x[indPoly]) + 2*polys[i].c[1,indPoly]
-    return poly1
 
-#version qui exclue les valeurs complexes
-def get_points_from_polys(Ys,polys,tck) :
+
+def get_points_from_polys_3D(Ys,tck) :
+    global roots
+    roots_ok=np.ndarray((0,3))
+    ux= np.linspace(0,1,500)
+    x,y,z= interpolate.splev(ux,tck)
+    for i in Ys:
+        x_new=x
+        y_new=y-i
+        z_new=z
+        tck_new,u = scipy.interpolate.splprep([x_new,y_new,z_new],s=2)
+        roots=interpolate.sproot(tck_new,2)[1] #on veut les valeurs pour y=0
+
+        if len(roots)>0:
+            root=[[interpolate.splev(rootos,tck_new)[0].reshape(1)[0],i,interpolate.splev(rootos,tck_new)[2].reshape(1)[0]] for rootos in roots]
+            if len(roots)>0:
+                roots_ok=np.append(roots_ok,root,axis=0)
+    return roots_ok
+    
+    
+def get_points_from_polys_2D(Ys,tck) :
+    global roots
     roots_ok=np.ndarray((0,2))
-    for i in range(polys[1].x.shape[0]-1):
-        coeff=polys[1].c.T[i]
-        xp=polys[1].x[i]
-        for y in Ys:
-            coeffs_new=np.array([coeff[0],(-coeff[0]*3*xp+coeff[1]),(3*coeff[0]*xp**2-2*coeff[1]*xp+coeff[2]),(-coeff[0]*xp**3+coeff[1]*xp**2-coeff[2]*xp+coeff[3])])
-            coeffs_new[3]=coeffs_new[3]-y
-            xs=np.roots(coeffs_new)
-            x_roots=[x for x in xs if x>=polys[1].x[i] and x<polys[1].x[i+1]]
-            if len(x_roots)>0:
-                roots=[[interpolate.splev(root,tck)[0].reshape(1)[0],y] for root in x_roots if np.isreal(root)==True]
-                if len(roots)>0:
-                    roots_ok=np.append(roots_ok,roots,axis=0)
+    ux= np.linspace(0,1,500)
+    x,y= interpolate.splev(ux,tck)
+    for i in Ys:
+        x_new=x
+        y_new=y-i
+        tck_new,u = scipy.interpolate.splprep([x_new,y_new],s=2)
+        roots=interpolate.sproot(tck_new,2)[1] #on veut les valeurs pour y=0
+
+        if len(roots)>0:
+            root=[[interpolate.splev(rootos,tck_new)[0].reshape(1)[0],i] for rootos in roots]
+            if len(roots)>0:
+                roots_ok=np.append(roots_ok,root,axis=0)
     return roots_ok
 
 # permet de mettre les deux listes à la même taille
@@ -90,47 +107,8 @@ def shift_spline(points_l,points_r,tck_l,tck_r,smooth):
             shifto=i
     return shifto
 
-# faire du shift avec R²
-def make_same_size(points_l,points_r,tck_l,tck_r,roots_l,roots_r,start_l,start_r,smooth):
-    x_tot_big=[]
-    x_tot_small=[]
-    y_tot=[]
-    diff=shift_spline(points_l,points_r,tck_l,tck_r,smooth)
-    roots_l=roots_l-[diff,0]
 
-    if len(roots_l)>len(roots_r): #we check which one is the smallest list
-        big_list=roots_l
-        small_list=roots_r
-        ind=1
-    else:
-        big_list=roots_r
-        small_list=roots_l
-        ind=2
-    
-    small_list=small_list[small_list[:, 1].argsort()] #we sort along the y axis
-    for i in range(len(small_list)):
-        common=np.array(np.where(np.isin(big_list[:,1],small_list[i,1])==True))[0] #we check if there is a common y for the i th point of small list
-        if len(common)==1: #on regarde si la liste ne contient qu'une valeur de y correspondante
-            x_tot_big=np.append(x_tot_big,big_list[common[0]][0])
-            x_tot_small=np.append(x_tot_small,small_list[i,0])
-            y_tot=np.append(y_tot,small_list[i,1])
-        elif len(common)>1: # if multiple values we check for the closest one
-            ref=np.zeros((len(common),2))+small_list[i]
-            to_test=big_list[common]
-            dist = np.linalg.norm(ref-to_test,axis=1)
-            min_dist=np.where(dist==min(dist))[0]
-            x_tot_big=np.append(x_tot_big,big_list[common[min_dist]][0][0])
-            x_tot_small=np.append(x_tot_small,small_list[i,0])
-            y_tot=np.append(y_tot,small_list[i,1])
 
-    if ind==1:
-        roots_l_tot=np.array(list(zip(x_tot_big,y_tot)))+[diff,0]
-        roots_r_tot=np.array(list(zip(x_tot_small,y_tot)))
-    else:
-        roots_r_tot=np.array(list(zip(x_tot_big,y_tot)))
-        roots_l_tot=np.array(list(zip(x_tot_small,y_tot)))+[diff,0]
-        
-    return roots_l_tot,roots_r_tot
 
 def make_same_size(roots_l,roots_r,start_l,start_r):
     x_tot_big=[]
@@ -197,8 +175,8 @@ def get_3D(data_l,data_r,origin,smooth,old_start_l,old_end_l,old_start_r,old_end
     polys_l = [interpolate.PPoly.from_spline((t_l, cj, k_l)) for cj in c_l]
     polys_r = [interpolate.PPoly.from_spline((t_r, cj, k_r)) for cj in c_r]
 
-    roots_l=get_points_from_polys(Ys,polys_l,tck_l)
-    roots_r=get_points_from_polys(Ys,polys_r,tck_r)
+    roots_l=get_points_from_polys_2D(Ys,tck_l)
+    roots_r=get_points_from_polys_2D(Ys,tck_r)
     
     roots_l_new,roots_r_new=make_same_size(roots_l,roots_r,start_l,start_r)
     xl=roots_l_new[:,0]
@@ -383,4 +361,44 @@ def get_ordered_points(x_stereo,y_stereo,z_stereo,start,end):
     return points[path_s],new_points
 
 #-----------------------------------------------------------------------------------------------
+origin=[1231,909]
+shift=[0,0]
+dirname = os.path.dirname(__file__)
+#start_end=pd.read_csv('C:/Users/romain.gautier/Documents/Manip/Tomography/stereopair/TEM/Data_alex_corrected/Bleu/csv/start_end.csv',header=None)
+start_end=pd.read_csv(os.path.join(dirname,'data/start_end.csv'),header=0)
+start_end_np=start_end.to_numpy()
+starts=[start_end_np[:,0:2],start_end_np[:,4:6]]
+ends=[start_end_np[:,2:4],start_end_np[:,6:8]]
+smooth=9
+x_map=np.array([])
+y_map=np.array([])
+z_map=np.array([])
 
+i=5
+
+alpha1=20
+alpha2=1
+
+
+
+data_l = pd.read_csv(os.path.join(dirname,'data/'+ str(i+1) + '_20.csv'))
+data_r = pd.read_csv(os.path.join(dirname,'data/'+str(i+1)+'_1.csv'))
+data_l=data_l.to_numpy()
+data_l=get_coordinates(data_l)#if you need to rearange your data from image to column
+data_r=data_r.to_numpy()
+data_r=get_coordinates(data_r)-shift#if you need to rearange your data from image to column
+
+start_l=np.array([starts[0][i][0],starts[0][i][1]])
+end_l=np.array([ends[0][i][0],ends[0][i][1]])
+start_r=np.array([starts[1][i][0],starts[1][i][1]])-shift
+end_r=np.array([ends[1][i][0],ends[1][i][1]])-shift
+points_l,points_r,xl,xr,x,z,y_tot,tck_l,tck_r=get_3D(data_l,data_r,origin,smooth,start_l,end_l,start_r,end_r,alpha1,alpha2)
+
+points=np.vstack((max(y_tot)-y_tot,x,z)).T
+fig = p.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(points[:,0],points[:,1],points[:,2])
+ax.set_aspect('equal')
+p.show
+
+np.save(os.path.join(dirname,'results/dislo_'+str(i+1)),points)
