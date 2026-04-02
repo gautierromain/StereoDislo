@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+title: "3D stereopair reconstrucation of dislocations"
+message: "If you use this software, please cite it as below."
+authors:
+  - given-names: Romain
+    family-names: Gautier
+    affiliation: IMT Nord Europe
+  - given-names: Alexandre
+    family-names: Mussi
+    affiliation: University of Lille - UMET
+  - given-names: Timmo
+    family-names: Weidner
+    affiliation: University of Lille - UMET
