@@ -8,8 +8,6 @@ Created on Thu Apr  2 13:18:44 2026
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
-import mpl_toolkits.mplot3d.axes3d as p3
 import pylab as p
 import scipy
 from scipy.spatial import Voronoi, voronoi_plot_2d
@@ -19,14 +17,6 @@ from scipy.spatial import cKDTree
 import networkx as nx
 import pandas as pd
 import math
-import random
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.mixture import GaussianMixture
-from sklearn.mixture import BayesianGaussianMixture
-from sklearn.cluster import KMeans
-import hyperspy.api as hs
-import tifffile as tif
-from tifffile import imwrite
 
 def get_spline(points,start,end,smooth):
     vor=Voronoi(points)
