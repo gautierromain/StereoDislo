@@ -155,36 +155,38 @@ def make_same_size_ordered(roots_l,roots_r):
     y_tot=[]
     diff=[np.nanmean(roots_l[:,0])-np.nanmean(roots_r[:,0]),0] #we want to remove the translation made by the projection due to tilt
     roots_l=roots_l-diff
-
-    if len(roots_l)>len(roots_r): #we check which one is the smallest list
-        big_list=roots_l
-        small_list=roots_r
-        ind=1
-    else:
-        big_list=roots_r
-        small_list=roots_l
-        ind=2
-
     
     j=0
     i=0
-
-    while (j < len(small_list) and i < len(big_list)):
-        if big_list[i,1]==small_list[j,1]:
-            y_tot=np.append(y_tot,small_list[j,1])
-            x_tot_big=np.append(x_tot_big,big_list[i,0])
-            x_tot_small=np.append(x_tot_small,small_list[j,0])
-                #il semble y avoir une dépendance si on fait défiler j d'abord ou bien i d'abord, à chercher dans ce coin
+    while (j < len(roots_r)-1 and i < len(roots_l)-11):
+        if roots_l[i,1]==roots_r[j,1]:
+            y_tot=np.append(y_tot,roots_r[j,1])
+            x_tot_big=np.append(x_tot_big,roots_l[i,0])
+            x_tot_small=np.append(x_tot_small,roots_r[j,0])
             i=i+1
-        j=j+1
+            j=j+1
+
+        else:
+            min_roots_l=np.array(np.where(roots_l[i:,1]==roots_r[j,1]))[0]
+            min_roots_r=np.array(np.where(roots_r[j:,1]==roots_l[i,1]))[0]
+            if (min_roots_l.size==0 and min_roots_r.size!=0):
+                j=j+min_roots_r[0]
+            elif (min_roots_r.size==0 and min_roots_l.size!=0):
+                i=i+min_roots_l[0]
+            elif (min_roots_r.size!=0 and min_roots_l.size!=0):
+                min_root=np.argmin(np.array([min_roots_r[0],min_roots_l[0]]))
+                if min_root==0:
+                    j=j+min_roots_r[0]
+                if min_root==1:
+                    i=i+min_roots_l[0]
+            else:
+                i=i+1
+                j=j+1
+
+    
         
-        
-    if ind==1:
-        roots_l_tot=np.array(list(zip(x_tot_big,y_tot)))+diff
-        roots_r_tot=np.array(list(zip(x_tot_small,y_tot)))
-    else:
-        roots_r_tot=np.array(list(zip(x_tot_big,y_tot)))
-        roots_l_tot=np.array(list(zip(x_tot_small,y_tot)))+diff
+    roots_l_tot=np.array(list(zip(x_tot_big,y_tot)))+diff
+    roots_r_tot=np.array(list(zip(x_tot_small,y_tot)))
         
     return roots_l_tot,roots_r_tot
     
