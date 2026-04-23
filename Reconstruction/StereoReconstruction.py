@@ -43,7 +43,6 @@ def get_spline(points,start,end,smooth):
 
 
 def get_points_from_polys_3D(Ys,tck) :
-    global roots
     roots_ok=np.ndarray((0,3))
     ux= np.linspace(0,1,500)
     x,y,z= interpolate.splev(ux,tck)
@@ -62,7 +61,6 @@ def get_points_from_polys_3D(Ys,tck) :
     
     
 def get_points_from_polys_2D(Ys,tck) :
-    global roots
     roots_ok=np.ndarray((0,2))
     ux= np.linspace(0,1,500)
     x,y= interpolate.splev(ux,tck)
@@ -76,6 +74,9 @@ def get_points_from_polys_2D(Ys,tck) :
             root=[[interpolate.splev(rootos,tck_new)[0].reshape(1)[0],i] for rootos in roots]
             if len(roots)>0:
                 roots_ok=np.append(roots_ok,root,axis=0)
+            if len(roots)==0:
+                root=[np.nan,i]
+                roots_ok=np.append(roots_ok,[root],axis=0)
     return roots_ok
 
 # permet de mettre les deux listes à la même taille
@@ -97,14 +98,62 @@ def shift_spline(points_l,points_r,tck_l,tck_r,smooth):
             shifto=i
     return shifto
 
+#allow to reorder 2D points considering where dislocations starts
+def reorder_points(points,start):
+    points = np.array(points) 
+    nan_indices = [i for i, (x, y) in enumerate(points) if np.isnan(x)]
+    non_nan_indices = [i for i in range(len(points)) if i not in nan_indices]
+
+    # Extract non-NaN points
+    non_nan_points = points[non_nan_indices]
+
+    # Reorder non-NaN points
+    ordered_non_nan = []
+    unvisited = set(range(len(non_nan_points)))
+    distances = np.linalg.norm(non_nan_points[list(unvisited)] - start,axis=1)
+    ini=list(unvisited)[np.argmin(distances)]
+    current=ini
+    ordered_non_nan.append(non_nan_points[current])
+    unvisited.remove(current)
+
+    doubles=np.array([],dtype=int)
+    while unvisited:
+        distances = np.linalg.norm(non_nan_points[list(unvisited)] - non_nan_points[current],axis=1
+        )
+        closest_idx = list(unvisited)[np.argmin(distances)]
+       # if non_nan_points[closest_idx,1]==ordered_non_nan[-1][1]: # avoid to consecutive points with the same y value but different x (can be the case when the derivative equal zero)
+       #     doubles=np.append(doubles,non_nan_indices[closest_idx])
+        ordered_non_nan.append(non_nan_points[closest_idx])
+        unvisited.remove(closest_idx)
+        current = closest_idx
+
+    # Reconstruct the full list with NaN points in their original positions
+    ordered_points = [None] * len(points)
+    non_nan_ptr = 0
+    nan_ptr = 0
+    for i in range(len(points)):
+        if i in nan_indices:
+            ordered_points[i] = points[i]
+        else:
+            ordered_points[i] = ordered_non_nan[non_nan_ptr]
+            non_nan_ptr += 1
+
+    #ordered_points=np.delete(np.array(ordered_points),doubles,axis=0)
+    for i in range(len(ordered_points)-1):
+        if np.array(ordered_points)[i,1]==np.array(ordered_points)[i+1,1]:
+            doubles=np.append(doubles,i)
+
+    ordered_points=np.delete(np.array(ordered_points),doubles,axis=0)
+    #np.where((points==pts[0]).all(axis=1))
+
+    return ordered_points
 
 
-
-def make_same_size(roots_l,roots_r,start_l,start_r):
+def make_same_size_ordered(roots_l,roots_r):
     x_tot_big=[]
     x_tot_small=[]
     y_tot=[]
-    diff=[np.mean(roots_l[:,0])-np.mean(roots_r[:,0]),0] #we want to remove the translation made by the projection due to tilt
+    diff=[np.nanmean(roots_l[:,0])-np.nanmean(roots_r[:,0]),0] #we want to remove the translation made by the projection due to tilt
     roots_l=roots_l-diff
 
     if len(roots_l)>len(roots_r): #we check which one is the smallest list
@@ -115,23 +164,21 @@ def make_same_size(roots_l,roots_r,start_l,start_r):
         big_list=roots_r
         small_list=roots_l
         ind=2
-    
-    small_list=small_list[small_list[:, 1].argsort()] #we sort along the y axis
-    for i in range(len(small_list)):
-        common=np.array(np.where(np.isin(big_list[:,1],small_list[i,1])==True))[0] #we check if there is a common y for the i th point of small list
-        if len(common)==1: #on regarde si la liste ne contient qu'une valeur de y correspondante
-            x_tot_big=np.append(x_tot_big,big_list[common[0]][0])
-            x_tot_small=np.append(x_tot_small,small_list[i,0])
-            y_tot=np.append(y_tot,small_list[i,1])
-        elif len(common)>1: # if multiple values we check for the closest one
-            ref=np.zeros((len(common),2))+small_list[i]
-            to_test=big_list[common]
-            dist = np.linalg.norm(ref-to_test,axis=1)
-            min_dist=np.where(dist==min(dist))[0]
-            x_tot_big=np.append(x_tot_big,big_list[common[min_dist]][0][0])
-            x_tot_small=np.append(x_tot_small,small_list[i,0])
-            y_tot=np.append(y_tot,small_list[i,1])
 
+    
+    j=0
+    i=0
+
+    while (j < len(small_list) and i < len(big_list)):
+        if big_list[i,1]==small_list[j,1]:
+            y_tot=np.append(y_tot,small_list[j,1])
+            x_tot_big=np.append(x_tot_big,big_list[i,0])
+            x_tot_small=np.append(x_tot_small,small_list[j,0])
+                #il semble y avoir une dépendance si on fait défiler j d'abord ou bien i d'abord, à chercher dans ce coin
+            i=i+1
+        j=j+1
+        
+        
     if ind==1:
         roots_l_tot=np.array(list(zip(x_tot_big,y_tot)))+diff
         roots_r_tot=np.array(list(zip(x_tot_small,y_tot)))
@@ -147,9 +194,6 @@ def get_3D(data_l,data_r,origin,smooth,old_start_l,old_end_l,old_start_r,old_end
     points_l=np.array([points_l[:,1],points_l[:,0]]).T
     points_r=data_r-origin
     points_r=np.array([points_r[:,1],points_r[:,0]]).T
-    
-    #alpha1=20*math.pi/180
-    #alpha2=1*math.pi/180
 
     start_l=np.flip(np.array(old_start_l)-origin)
     end_l=np.flip(np.array(old_end_l)-origin)
@@ -168,7 +212,10 @@ def get_3D(data_l,data_r,origin,smooth,old_start_l,old_end_l,old_start_r,old_end
     roots_l=get_points_from_polys_2D(Ys,tck_l)
     roots_r=get_points_from_polys_2D(Ys,tck_r)
     
-    roots_l_new,roots_r_new=make_same_size(roots_l,roots_r,start_l,start_r)
+    reorder_roots_l=reorder_points(roots_l,start_l)
+    reorder_roots_r=reorder_points(roots_r,start_r)
+    
+    roots_l_new,roots_r_new=make_same_size_ordered(reorder_roots_l,reorder_roots_r)
     xl=roots_l_new[:,0]
     y_tot=roots_l_new[:,1]
     xr=roots_r_new[:,0]
@@ -190,6 +237,7 @@ def get_coordinates(data):
 #zi = zi[..., None]
     x_shaped=np.hstack((xi,yi))
     return x_shaped
+    
 def compute_delaunay_tetra_circumcenters(dt):
 
 #Compute the centers of the circumscribing circle of each tetrahedron in the Delaunay triangulation.
@@ -351,10 +399,9 @@ def get_ordered_points(x_stereo,y_stereo,z_stereo,start,end):
     return points[path_s],new_points
 
 #-----------------------------------------------------------------------------------------------
-origin=[1231,909]
+origin=[1231,909] #defined by user, it is the invarient point between two images
 shift=[0,0]
 dirname = os.path.dirname(__file__)
-#start_end=pd.read_csv('C:/Users/romain.gautier/Documents/Manip/Tomography/stereopair/TEM/Data_alex_corrected/Bleu/csv/start_end.csv',header=None)
 start_end=pd.read_csv(os.path.join(dirname,'data/start_end.csv'),header=0)
 start_end_np=start_end.to_numpy()
 starts=[start_end_np[:,0:2],start_end_np[:,4:6]]
